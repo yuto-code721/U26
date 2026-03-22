@@ -1,4 +1,8 @@
 # U26: Universal-2026 Time Standard
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![Language: C](https://img.shields.io/badge/Language-C-blue.svg)
+![Standard: UTC](https://img.shields.io/badge/Standard-UTC-orange.svg)
+![Status: 3038_Ready](https://img.shields.io/badge/Status-3038_Ready-brightgreen.svg)
 
 **U26** is a sustainable, high-density timestamp protocol designed to solve the **Year 2038 Problem** while reducing data footprint by **70%**.
 
