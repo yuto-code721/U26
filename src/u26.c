@@ -1,37 +1,57 @@
 #include "u26.h"
 #include <string.h>
-#include <openssl/sha.h>
-#include <stdio.h>
 
-static const char U26_ALPHABET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+static const char U26_CHARSET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-void u26_encode(int64_t unix_time, char* out_str) {
-    int64_t val = unix_time - U26_OFFSET;
-    if (val < 0) { strcpy(out_str, "0"); return; }
-    
-    char buffer[16];
-    int i = 0;
-    while (val > 0) {
-        buffer[i++] = U26_ALPHABET[val % 62];
-        val /= 62;
+int u26_encode(int64_t unix_time, char* out_buffer) {
+    if (unix_time < U26_EPOCH_OFFSET) {
+        return U26_ERR_PAST_EPOCH;
     }
-    for (int j = 0; j < i; j++) out_str[j] = buffer[i - 1 - j];
-    out_str[i] = '\0';
-    if (i == 0) strcpy(out_str, "0");
+
+    uint64_t delta = (uint64_t)(unix_time - U26_EPOCH_OFFSET);
+    char temp[16];
+    int i = 0;
+
+    // Handle the absolute zero point
+    if (delta == 0) {
+        out_buffer[0] = '0';
+        out_buffer[1] = '\0';
+        return U26_SUCCESS;
+    }
+
+    // Base62 transformation loop (Low-level optimization)
+    while (delta > 0) {
+        temp[i++] = U26_CHARSET[delta % 62];
+        delta /= 62;
+    }
+
+    // Reverse the temporary buffer into the output
+    for (int j = 0; j < i; j++) {
+        out_buffer[j] = temp[i - 1 - j];
+    }
+    out_buffer[i] = '\0';
+
+    return U26_SUCCESS;
 }
 
 int64_t u26_decode(const char* u26_str) {
-    int64_t val = 0;
-    while (*u26_str) {
-        const char* p = strchr(U26_ALPHABET, *u26_str++);
-        if (p) val = val * 62 + (int64_t)(p - U26_ALPHABET);
-    }
-    return val + U26_OFFSET;
-}
+    if (!u26_str) return -1;
 
-void u26_get_integrity(const char* u26_str, char* hash_hex) {
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256((unsigned char*)u26_str, strlen(u26_str), hash);
-    for (int i = 0; i < 8; i++) sprintf(hash_hex + (i * 2), "%02x", hash[i]);
-    hash_hex[16] = '\0';
+    uint64_t delta = 0;
+    size_t len = strlen(u26_str);
+
+    for (size_t i = 0; i < len; i++) {
+        char c = u26_str[i];
+        int val = 0;
+
+        // Optimized character mapping
+        if (c >= '0' && c <= '9') val = c - '0';
+        else if (c >= 'A' && c <= 'Z') val = c - 'A' + 10;
+        else if (c >= 'a' && c <= 'z') val = c - 'a' + 36;
+        else return -1; // Invalid character detected
+
+        delta = delta * 62 + val;
+    }
+
+    return (int64_t)(delta + U26_EPOCH_OFFSET);
 }
