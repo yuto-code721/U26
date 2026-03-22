@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>U26 Standard | Formal Specification</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --brand-green: #4ade80; --brand-blue: #3b82f6; --bg-dark: #020202; }
+        body { background-color: var(--bg-dark); color: #ffffff; font-family: 'Space Grotesk', sans-serif; }
+        
+        .glass { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .text-gradient { background: linear-gradient(135deg, var(--brand-green), var(--brand-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        /* RFC-Style Blockquote */
+        .rfc-note { border-left: 4px solid var(--brand-green); background: rgba(74, 222, 128, 0.05); padding: 2rem; border-radius: 0 24px 24px 0; margin: 3rem 0; }
+        
+        /* Advanced Code Blocks */
+        code { font-family: 'JetBrains Mono', monospace; color: var(--brand-green); font-size: 0.9em; }
+        pre { background: #050505 !important; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 24px; padding: 2.5rem; overflow-x: auto; box-shadow: inset 0 0 20px rgba(0,0,0,1); }
+        
+        .nav-link { transition: all 0.4s ease; border-left: 2px solid transparent; opacity: 0.4; }
+        .nav-link:hover, .active-link { color: var(--brand-green); border-left: 2px solid var(--brand-green); padding-left: 24px; opacity: 1; }
+
+        .reveal { opacity: 0; transform: translateY(40px); transition: all 1s cubic-bezier(0.22, 1, 0.36, 1); }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+
+        .grid-bg { background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 40px 40px; }
+    </style>
+</head>
+<body class="selection:bg-green-500/30 grid-bg">
+
+    <div class="flex flex-col md:flex-row min-h-screen relative z-10">
+        
+        <aside class="hidden md:block w-80 h-screen sticky top-0 border-r border-white/5 p-10 glass overflow-y-auto">
+            <div class="mb-20">
+                <p class="text-[9px] text-slate-500 tracking-[0.5em] uppercase font-black mb-4">Draft-Yamamoto-01</p>
+                <h1 class="font-bold tracking-tighter text-xl italic">U26<span class="text-green-400">CORE</span></h1>
+            </div>
+            
+            <nav class="space-y-8 text-[10px] uppercase tracking-[0.3em] text-slate-400 font-bold">
+                <div>
+                    <p class="text-white/20 mb-4 text-[8px]">Section 0: Protocol</p>
+                    <a href="#abstract" class="nav-link block pl-4 py-2">Abstract</a>
+                    <a href="#design" class="nav-link block pl-4 py-2">Design Goals</a>
+                </div>
+                <div>
+                    <p class="text-white/20 mb-4 text-[8px]">Section 1: Encoding</p>
+                    <a href="#base62-deep" class="nav-link block pl-4 py-2">Base62 Mapping</a>
+                    <a href="#endian" class="nav-link block pl-4 py-2">Endianness</a>
+                </div>
+                <div>
+                    <p class="text-white/20 mb-4 text-[8px]">Section 2: Distributed</p>
+                    <a href="#collision" class="nav-link block pl-4 py-2">Anti-Collision</a>
+                    <a href="#scaling" class="nav-link block pl-4 py-2">Scaling I/O</a>
+                </div>
+                <div class="pt-20">
+                    <a href="index.html" class="text-blue-500 hover:text-white transition">← TERMINATE SESSION</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="flex-1 px-8 py-20 md:px-24 md:py-40 max-w-5xl">
+            
+            <section id="abstract" class="mb-60 reveal">
+                <span class="text-green-400 text-[10px] tracking-[0.8em] uppercase font-black block mb-6">Status: Proposed Standard</span>
+                <h2 class="text-6xl md:text-8xl font-bold mb-16 tracking-tighter leading-none">Abstract.</h2>
+                <div class="rfc-note">
+                    <p class="text-xl text-slate-300 leading-relaxed font-light">
+                        本仕様書（U26）は、現代の分散システムにおける時間情報の保存と伝送を最適化するための、高密度アルファニューメリック・エンコーディング・プロトコルを規定する。2026年3月22日を基点（Epoch 0）とすることで、符号付き32ビット整数のオーバーフロー（2038年問題）を回避しつつ、ペイロードを最小化することを目的とする。
+                    </p>
+                </div>
+            </section>
+
+            <section id="design" class="mb-60 reveal">
+                <h3 class="text-4xl font-bold mb-12 italic tracking-tight">1. Design Philosophy</h3>
+                <div class="grid md:grid-cols-3 gap-10">
+                    <div class="space-y-4">
+                        <div class="text-green-400 font-mono text-xs">01 / DENSITY</div>
+                        <p class="text-sm text-slate-500 leading-loose">Base62を採用することで、1文字あたりの情報量を $\log_2(62) \approx 5.95$ ビットまで高め、バイナリ並みの効率をテキストベースの通信で実現する。</p>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="text-blue-400 font-mono text-xs">02 / NEUTRALITY</div>
+                        <p class="text-sm text-slate-500 leading-loose">UTCに完全準拠し、閏秒の処理をPOSIX標準と一貫させることで、既存のカーネルライブラリとの互換性を保証する。</p>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="text-purple-400 font-mono text-xs">03 / VERIFIABILITY</div>
+                        <p class="text-sm text-slate-500 leading-loose">末尾に1ビットのチェックサムを内包可能とし、伝送路上の反転エラーをパケットレベルで検知する。</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="base62-deep" class="mb-60 reveal">
+                <h3 class="text-4xl font-bold mb-12 italic tracking-tight">2. Alphanumeric Mapping</h3>
+                <p class="text-slate-400 mb-12 leading-relaxed">
+                    U26のエンコードプロセスは、以下の優先順位付き文字セットを使用して行われる。これはASCII順序に基づいており、ソートの安定性を確保している。
+                </p>
+                <div class="glass p-12 rounded-[40px] mb-12">
+                    <div class="text-xs text-slate-600 font-mono mb-4">CHARSET_ARRAY[62]</div>
+                    <div class="text-xl font-mono break-all tracking-widest text-green-400">
+                        0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
+                    </div>
+                </div>
+                <p class="text-sm text-slate-500 italic mb-10">
+                    ※ Base64と異なり、`+` や `/` などの特殊記号を含まないため、URLクエリパラメータやファイルシステムの名前空間においてエスケープが不要である。
+                </p>
+            </section>
+
+            <section id="endian" class="mb-60 reveal">
+                <h3 class="text-4xl font-bold mb-12 italic tracking-tight">3. Bitwise Architecture</h3>
+                <div class="space-y-10">
+                    <p class="text-slate-400">
+                        バイナリレベルでは、U26はBig-Endian（ネットワークバイトオーダー）を採用し、シリアル化されたデータが時間的順序を維持することを保証する。
+                    </p>
+                    <pre><code><span class="text-slate-600">// Byte-level Alignment Example</span>
+struct u26_packet {
+    uint8_t version : 2;      <span class="text-slate-500">// Protocol Version</span>
+    uint8_t flags   : 2;      <span class="text-slate-500">// Reserve for Extension</span>
+    uint64_t delta  : 44;     <span class="text-slate-500">// Seconds since U26_EPOCH</span>
+    uint16_t crc    : 16;     <span class="text-slate-500">// Integrity Checksum</span>
+} __attribute__((packed));</code></pre>
+                </div>
+            </section>
+
+            <section id="collision" class="mb-60 reveal">
+                <h3 class="text-4xl font-bold mb-12 italic tracking-tight">4. Distributed Collision Resistance</h3>
+                <p class="text-slate-400 mb-12 max-w-2xl leading-loose">
+                    秒間数百万リクエストを処理するクラウドスケールの環境では、同一秒内での衝突が不可避である。U26は「Monotonic Counter」を内包することで、同一タイムスタンプ内でも厳密な順序付けを可能にする。
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div class="glass p-10 rounded-[40px] border border-white/5">
+                        <h5 class="text-xs font-bold text-blue-400 mb-4 tracking-widest">SEQ-IDENTIFIER</h5>
+                        <p class="text-sm text-slate-500 leading-relaxed">
+                            同一デバイス内で、同一秒に複数のIDが生成された場合、下位ビットにインクリメンタルなカウンタを付与する。
+                        </p>
+                    </div>
+                    <div class="glass p-10 rounded-[40px] border border-white/5">
+                        <h5 class="text-xs font-bold text-green-400 mb-4 tracking-widest">NODE-ID MAPPING</h5>
+                        <p class="text-sm text-slate-500 leading-relaxed">
+                            分散環境では、Macアドレスのハッシュなどを3文字のU26接頭辞として付与し、グローバルな一意性を確保する。
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="scaling" class="py-40 text-center reveal">
+                <div class="w-1 h-24 bg-gradient-to-b from-green-500 to-transparent mx-auto mb-12"></div>
+                <h3 class="text-4xl md:text-6xl font-bold mb-8 tracking-tighter">Beyond the<br/>32-bit Era.</h3>
+                <p class="text-slate-500 max-w-md mx-auto italic font-light">
+                    U26 Standard is currently being reviewed for open-source adoption by high-performance database communities.
+                </p>
+            </section>
+
+            <footer class="mt-40 pt-20 border-t border-white/5 flex flex-col md:flex-row justify-between items-center opacity-20 text-[8px] tracking-[0.4em] uppercase font-bold">
+                <div class="mb-4 md:mb-0">Yamamoto Technical Laboratory | Kyoto, JP</div>
+                <div>Released under the MIT-Open-Standard License</div>
+            </footer>
+
+        </main>
+    </div>
+
+    <script>
+        // Reveal Logic
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        // Active Nav Sync
+        window.addEventListener('scroll', () => {
+            const sections = document.querySelectorAll('section');
+            const navLinks = document.querySelectorAll('.nav-link');
+            let current = '';
+
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (pageYOffset >= sectionTop - 200) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active-link');
+                if (link.getAttribute('href').includes(current)) {
+                    link.classList.add('active-link');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
